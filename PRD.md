@@ -1,380 +1,293 @@
-# PRD: Локальный голосовой ассистент для Codex CLI
+# PRD: Local Voice Assistant for Codex CLI
 
-## 1. Краткое описание
+## 1. Summary
 
-Нужно создать локального голосового ассистента, который принимает голосовую команду пользователя, преобразует ее в текст через локальную STT-модель, передает команду в Codex CLI, получает ответ Codex и озвучивает его через локальную TTS-модель.
+Build a local voice assistant that listens for a wake phrase, acknowledges the user, records a spoken command, transcribes it with a local STT model, sends the text to Codex CLI, receives Codex's final answer, and speaks that answer with a local TTS model.
 
-Ассистент должен работать как голосовой интерфейс поверх Codex CLI. STT и TTS должны запускаться локально, без внешних API. Codex CLI может использовать стандартную облачную модель OpenAI или локального LLM-провайдера, если пользователь отдельно настроит `codex --oss`.
+STT, VAD, wake phrase detection, and TTS run locally. Codex CLI uses the configured Codex model provider. By default this project runs Codex with `gpt-5.5` and `model_reasoning_effort = "low"` for faster responses without downgrading the model.
 
-## 2. Цели продукта
+## 2. Goals
 
-- Дать пользователю возможность управлять Codex CLI голосом.
-- Уменьшить ручной ввод команд в терминале.
-- Сделать локальную обработку аудио: wake word, запись, STT и TTS.
-- Показывать пользователю распознанный текст и ответ Codex без обязательного постоянного логирования.
-- Минимизировать риск случайного выполнения опасных команд.
+- Provide a voice interface for Codex CLI.
+- Keep STT, TTS, VAD, and wake phrase detection local.
+- Use an English TTS voice for replies, even when the spoken command is Russian.
+- Support `hey jarvis` as the active wake phrase.
+- Say an acknowledgement before recording the user's command.
+- Avoid permanent response logging by default.
+- Keep temporary audio and response files ignored by Git and overwritten during normal use.
 
-## 3. Не цели
+## 3. Non-Goals
 
-- Не строить полноценную замену Codex CLI.
-- Не обучать собственные STT/TTS-модели на первом этапе.
-- Не делать облачный voice assistant через сторонние STT/TTS API.
-- Не реализовывать сложный GUI в MVP.
-- Не создавать отдельные Git worktree или дополнительные копии проекта без явной команды пользователя.
+- Do not replace Codex CLI.
+- Do not train custom STT or TTS models in the MVP.
+- Do not use cloud STT or TTS APIs.
+- Do not build a full GUI in the MVP.
+- Do not create extra Git worktrees or duplicate project folders unless explicitly requested.
 
-## 4. Пользовательский сценарий
+## 4. Current User Flow
 
-1. Пользователь говорит wake word, например: "Hey Codex".
-2. Ассистент включает запись команды.
-3. Пользователь произносит задачу.
-4. Ассистент определяет конец речи через VAD.
-5. STT-модель преобразует аудио в текст.
-6. Ассистент показывает распознанный текст в терминале.
-7. Если команда потенциально опасная, ассистент просит подтверждение.
-8. Команда передается в Codex CLI.
-9. Codex выполняет задачу и возвращает финальный ответ.
-10. Ассистент получает финальный ответ через временный файл или stdout.
-11. TTS-модель озвучивает короткую версию ответа или весь ответ, если он небольшой.
+1. The user starts `voice-codex listen`.
+2. The assistant listens for the wake phrase.
+3. The user says `hey jarvis`.
+4. The assistant says: `Yes sir. How can I help you?`
+5. After the acknowledgement finishes, the assistant records the user's command.
+6. VAD automatically stops recording after speech ends.
+7. Local STT transcribes the recorded audio.
+8. The transcript is sent to Codex CLI.
+9. Codex returns a concise English final answer.
+10. The answer is spoken with the local Piper English voice.
+11. The assistant returns to wake phrase listening instead of exiting.
 
-## 5. Основная архитектура
+## 5. Architecture
 
 ```text
 Microphone
-  -> Wake word detector
-  -> Voice activity detection
-  -> Audio recorder
-  -> Local STT
-  -> Command normalizer
-  -> Safety confirmation layer
+  -> openWakeWord wake phrase detector
+  -> acknowledgement TTS
+  -> Silero VAD command recorder
+  -> local STT with faster-whisper
   -> Codex CLI adapter
-  -> Response formatter
-  -> Local TTS
-  -> Speaker
+  -> response trimming
+  -> local Piper TTS
+  -> speaker
 ```
 
-## 6. Компоненты
+## 6. Components
 
-### 6.1 Wake word detector
+### Wake Phrase Detection
 
-Назначение: слушать микрофон в фоновом режиме и запускать запись команды после ключевой фразы.
+Engine: `openwakeword`
 
-Рекомендуемый вариант для MVP:
+Active model:
 
-- `openWakeWord`
+- `hey_jarvis_v0.1`
 
-Альтернатива:
+Configured desired phrases:
 
-- Porcupine, если нужна более готовая коммерческая wake-word система.
+- `hey jarvis`
+- `good morning jarvis`
+- `good evening jarvis`
+- `good afternoon jarvis`
+- `hello jarvis`
 
-### 6.2 Voice Activity Detection
+Only `hey jarvis` is active with a ready pretrained model. The other phrases require custom openWakeWord ONNX models before they can trigger reliably.
 
-Назначение: понять, когда пользователь начал и закончил говорить.
+### Voice Activity Detection
 
-Рекомендуемый вариант:
+Engine: `silero-vad`
 
-- `Silero VAD`
+Purpose:
 
-### 6.3 Local STT
+- Start recording after the wake acknowledgement.
+- Stop recording automatically after the user's speech ends.
+- Keep manual and timed recording modes as fallbacks.
 
-Назначение: преобразовать записанный голос в текст.
+### STT
 
-Рекомендуемые варианты:
+Engine: `faster-whisper`
 
-- `whisper.cpp` для простого, быстрого и независимого CLI-варианта.
-- `faster-whisper` для Python-интеграции и более гибкого пайплайна.
+Default model:
 
-Рекомендуемая модель для MVP:
+- `small`
 
-- `Whisper small` или `Whisper medium`.
+Default language:
 
-Для слабого CPU:
+- Empty value, allowing automatic language detection.
 
-- `base` или `small`.
+The assistant supports English and Russian input. Accuracy can be improved later by switching to `medium` or `large-v3`.
 
-Для лучшего качества русского/английского распознавания:
+### Codex CLI Adapter
 
-- `medium` или `large-v3`, если хватает ресурсов.
+The assistant sends text prompts to `codex exec`.
 
-### 6.4 Codex CLI adapter
+Default Codex settings:
 
-Назначение: передать текст команды в Codex CLI и получить финальный ответ.
+- Model: `gpt-5.5`
+- Reasoning effort: `low`
+- Sandbox: `workspace-write`
+- Output transfer: temporary `logs/last-codex-response.md`
 
-Базовый вариант:
+The temporary response file is overwritten on each run and ignored by Git.
 
-```bash
-codex exec -C /path/to/project --output-last-message .codex-last-response.txt -
-```
+### TTS
 
-Поток:
+Engine: `Piper`
 
-1. Ассистент передает распознанную команду в stdin.
-2. Codex выполняет задачу.
-3. Финальный ответ временно сохраняется в файл для передачи между Codex CLI и ассистентом.
-4. Ассистент читает файл и передает текст в TTS.
+Default voice:
 
-Важно:
+- `en_US-lessac-medium`
 
-- Для MVP использовать `codex exec`.
-- Для продолжения диалога позже рассмотреть `codex exec resume --last`.
-- Для сложного интерактивного режима позже рассмотреть `codex mcp-server` или отдельный процесс Codex CLI.
+The assistant speaks both the wake acknowledgement and Codex replies with this English voice.
 
-### 6.5 Local TTS
+## 7. MVP Features
 
-Назначение: озвучить ответ Codex.
+- `voice-codex check`
+- `voice-codex devices`
+- `voice-codex speak`
+- `voice-codex record`
+- `voice-codex record --duration N`
+- `voice-codex record --vad`
+- `voice-codex transcribe [audio_path]`
+- `voice-codex ask-text TEXT`
+- `voice-codex ask`
+- `voice-codex ask --duration N`
+- `voice-codex ask --audio-path PATH`
+- `voice-codex ask --vad`
+- `voice-codex wake-test AUDIO_PATH`
+- `voice-codex listen`
+- `voice-codex listen --once`
+- `voice-codex listen --once --timeout N`
 
-Рекомендуемый вариант для MVP:
+## 8. Runtime States
 
-- `Piper`
+The assistant prints runtime states in the terminal:
 
-Альтернативы:
+- `listening`
+- `recording`
+- `transcribing`
+- `thinking`
+- `speaking`
+- `idle`
+- `error`
 
-- `Kokoro`, если нужен более приятный голос и пользователь готов к более сложной настройке.
-- `Coqui TTS`, если понадобится больше гибкости, но это тяжелее для поддержки.
-
-Рекомендуемый голос для MVP:
-
-- Английский: `en_US-lessac-medium`.
-
-Даже если пользователь диктует команду на русском, голосовой ответ по умолчанию должен озвучиваться английским голосом. Для этого Codex adapter просит Codex формировать финальный ответ на английском языке, а TTS использует английский Piper voice.
-
-## 7. MVP
-
-MVP должен работать без wake word. Запуск команды происходит вручную через CLI или hotkey.
-
-### MVP flow
+Expected full wake flow:
 
 ```text
-User presses Enter/hotkey
-  -> assistant records speech
-  -> local STT transcribes speech
-  -> assistant sends text to Codex CLI
-  -> Codex returns final answer
-  -> assistant speaks the answer with local TTS
+[listening]
+Wake detected
+[speaking]
+Speak your command.
+[recording]
+[transcribing]
+[thinking]
+[speaking]
+[idle]
+[listening]
 ```
 
-### MVP features
+## 9. Safety And Privacy
 
-- Запись аудио с микрофона.
-- Автоостановка записи через VAD или ручная остановка.
-- Локальное распознавание речи.
-- Передача команды в `codex exec`.
-- Получение финального ответа Codex.
-- Озвучивание ответа локальным TTS.
-- Минимальная диагностика:
-  - показывать распознанный текст в терминале;
-  - показывать финальный ответ Codex в терминале;
-  - постоянные debug-логи должны быть опциональными и выключенными по умолчанию;
-  - ошибки выполнения можно показывать в терминале без сохранения полного ответа ассистента.
+- Responses are not permanently logged by default.
+- Files in `logs/` are temporary ignored files.
+- Audio and response files are overwritten during normal use.
+- The microphone is not recording commands while the assistant is speaking.
+- The Safety Confirmation Layer is postponed and should be revisited before allowing risky commands.
 
-## 8. Версия 1
+Risky command categories for the postponed safety layer:
 
-После MVP добавить:
+- deleting files;
+- changing Git history;
+- installing packages;
+- running privileged commands;
+- handling secrets or tokens;
+- sending data externally.
 
-- wake word;
-- состояние `listening`, `recording`, `thinking`, `speaking`, `error`;
-- подтверждение опасных команд;
-- настройку языка STT;
-- настройку голоса TTS;
-- короткую голосовую выжимку для длинных ответов;
-- повтор последнего ответа;
-- отмену текущей операции.
+## 10. Configuration
 
-## 9. Версия 2
+The main config lives in `config.toml`.
 
-Возможные улучшения:
-
-- Диалоговый режим с продолжением сессии Codex.
-- Интеграция с локальным LLM через `codex --oss --local-provider ollama` или `lmstudio`.
-- Небольшой tray UI.
-- Push-to-talk режим.
-- Настройка кастомного wake word.
-- Автоматическое определение языка.
-- Отдельные профили: coding, review, shell helper, explanation.
-- Локальная база истории команд.
-
-## 10. Требования к безопасности
-
-- Опасные действия требуют подтверждения голосом или вводом с клавиатуры.
-- Примеры опасных действий:
-  - удаление файлов;
-  - изменение Git history;
-  - запуск команд с широкими правами;
-  - установка пакетов;
-  - отправка данных наружу;
-  - операции с секретами или токенами.
-- Во время озвучивания ответа микрофон не должен отправлять новые команды в Codex.
-- Ответы ассистента не должны постоянно логироваться по умолчанию.
-- Временные файлы для передачи данных между процессами допустимы, но их можно перезаписывать при каждом новом запуске.
-- Постоянное логирование разрешено только как явный debug-режим.
-- По умолчанию Codex должен запускаться в текущей директории проекта.
-
-## 11. Технические требования
-
-- Основной язык оркестратора: Python.
-- Поддерживаемая ОС на первом этапе: macOS.
-- Запуск из текущей папки проекта.
-- Локальные STT/TTS без внешних API.
-- Codex CLI должен быть установлен и авторизован.
-- Нужен доступ к микрофону и аудиовыходу.
-- Конфигурация должна храниться в локальном файле, например `config.toml` или `config.yaml`.
-
-## 12. Предлагаемая структура проекта
-
-```text
-voice-assistant/
-  PRD.md
-  README.md
-  pyproject.toml
-  config.example.toml
-  src/
-    voice_assistant/
-      __init__.py
-      main.py
-      audio_input.py
-      vad.py
-      wake_word.py
-      stt.py
-      codex_adapter.py
-      tts.py
-      safety.py
-      logging.py
-  models/
-    .gitkeep
-  logs/
-    .gitkeep
-```
-
-## 13. Конфигурация
-
-Пример будущего конфига:
+Important sections:
 
 ```toml
-[audio]
-sample_rate = 16000
-input_device = "default"
-output_device = "default"
-
-[wake_word]
-enabled = false
-engine = "openwakeword"
-phrase = "hey codex"
-
-[stt]
-engine = "faster-whisper"
-model = "small"
-language = "ru"
-
 [codex]
-project_dir = "/Users/mishahorodnytskyi/Developer/voice-assistant"
-approval_policy = "never"
-sandbox = "workspace-write"
+model = "gpt-5.5"
+model_reasoning_effort = "low"
 
 [tts]
-engine = "piper"
 voice_model = "models/piper/en_US-lessac-medium.onnx"
-voice_config = "models/piper/en_US-lessac-medium.onnx.json"
-output_wav = "logs/last-response.wav"
-player = "afplay"
 
-[safety]
-confirm_dangerous_commands = true
+[wake_word]
+model_names = ["hey_jarvis_v0.1"]
+acknowledgement = "Yes sir. How can I help you?"
+
+[vad]
+max_recording_seconds = 20.0
 ```
 
-## 14. Модели и зависимости
+## 11. Dependencies
 
-### Минимальный набор
+Core runtime:
 
-- Python 3.11+.
-- Codex CLI.
-- `sounddevice` или аналог для записи аудио.
-- `faster-whisper` или `whisper.cpp`.
-- `Silero VAD`.
-- `Piper TTS`.
-- Один Whisper STT model.
-- Один Piper TTS voice.
+- Python 3.9+
+- Codex CLI
+- `faster-whisper`
+- `sounddevice`
+- `soundfile`
+- `piper-tts`
+- `silero-vad`
+- `openwakeword`
 
-### Рекомендуемый MVP-набор
+Local models:
 
-- STT: `faster-whisper` + `small` или `medium`.
-- VAD: `Silero VAD`.
-- TTS: `Piper` + один английский или русский voice.
-- Wake word: отключен на первом этапе.
+- Piper voice: `en_US-lessac-medium`
+- Whisper model: `small`
+- openWakeWord model: `hey_jarvis_v0.1`
 
-### Рекомендуемый V1-набор
+## 12. Test Plan
 
-- Wake word: `openWakeWord`.
-- STT: `faster-whisper` или `whisper.cpp`.
-- VAD: `Silero VAD`.
-- TTS: `Piper`.
+Environment check:
 
-## 15. Открытые вопросы
+```bash
+voice-codex check
+```
 
-- Нужна ли полностью локальная LLM-часть Codex или только локальные STT/TTS?
-- Какой основной язык команд: русский, английский или оба?
-- Нужно ли ассистенту выполнять команды сразу или всегда сначала повторять распознанную фразу?
-- Нужна ли поддержка продолжения одной Codex-сессии?
-- Какой голос TTS предпочтителен: русский, английский или оба?
-- Нужен ли push-to-talk как основной режим вместо wake word?
+TTS check:
 
-## 16. Риски
+```bash
+voice-codex speak "Yes sir. How can I help you?"
+```
 
-- STT может неправильно распознавать команды, особенно имена файлов, пакетов и терминальные команды.
-- Wake word может срабатывать случайно.
-- TTS может быть подхвачен микрофоном и запустить новую команду.
-- Длинные ответы Codex могут быть неудобны для озвучивания.
-- Локальные модели могут работать медленно на CPU.
-- Интерактивные уточнения Codex сложнее поддерживать через простой `codex exec`.
+VAD recording check:
 
-## 17. Метрики успеха
+```bash
+voice-codex record --vad
+afplay logs/last-input.wav
+```
 
-- Команда голосом успешно доходит до Codex.
-- Codex выполняет задачу в правильной директории.
-- Финальный ответ Codex озвучивается.
-- Финальный ответ Codex озвучивается без обязательного постоянного логирования.
-- Пользователь может отменить операцию.
-- Опасные команды не выполняются без подтверждения.
+STT check:
 
-## 18. План реализации
+```bash
+voice-codex transcribe logs/last-input.wav
+```
 
-### Этап 1: CLI MVP
+Codex text check:
 
-- Создать Python-проект.
-- Настроить запись аудио.
-- Подключить локальный STT.
-- Подключить Codex CLI через subprocess.
-- Подключить локальный TTS.
-- Добавить минимальную диагностику ошибок.
+```bash
+voice-codex ask-text "Summarize this project in one short sentence without changing any files."
+```
 
-### Этап 2: Надежность
+Full voice check without wake phrase:
 
-- Добавить VAD.
-- Добавить обработку ошибок.
-- Добавить конфиг.
-- Добавить подтверждение опасных команд.
-- Добавить короткую голосовую выжимку для длинных ответов.
+```bash
+voice-codex ask --vad
+```
 
-### Этап 3: Wake word
+Wake model file check:
 
-- Подключить openWakeWord.
-- Добавить состояние `listening`.
-- Отключать прослушивание во время TTS.
-- Добавить настройку threshold.
+```bash
+voice-codex wake-test logs/hey-jarvis-test.wav
+```
 
-### Этап 4: Диалоговый режим
+Full wake flow:
 
-- Исследовать `codex exec resume --last`.
-- Добавить поддержку уточняющих вопросов.
-- Добавить хранение текущей сессии.
+```bash
+voice-codex listen
+```
 
-## 19. Рекомендуемое первое решение
+## 13. Known Limitations
 
-Начать с Python MVP без wake word:
+- Only `hey jarvis` has an active pretrained wake phrase model.
+- Additional wake phrases need custom ONNX models.
+- STT may misrecognize filenames, package names, and shell commands.
+- Long Codex answers are trimmed before speech.
+- The Safety Confirmation Layer is postponed.
+- Codex itself may still use cloud inference unless configured with a local provider.
 
-1. Нажать Enter для начала записи.
-2. Произнести команду.
-3. Получить transcript через локальный STT.
-4. Передать transcript в `codex exec`.
-5. Получить ответ через `--output-last-message`.
-6. Озвучить ответ через Piper.
+## 14. Future Work
 
-Это даст рабочую основу, которую можно быстро проверить и постепенно усложнять.
+- Add the postponed Safety Confirmation Layer.
+- Train custom openWakeWord models for the additional Jarvis phrases.
+- Add dialogue continuation with `codex exec resume --last`.
+- Add push-to-talk mode.
+- Add optional debug logs without storing all assistant responses.
+- Add a small tray UI for macOS.

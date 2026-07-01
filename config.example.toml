@@ -3,6 +3,26 @@ sample_rate = 16000
 channels = 1
 recording_device = ""
 
+[vad]
+enabled = false
+threshold = 0.5
+min_silence_duration_ms = 700
+speech_pad_ms = 100
+max_recording_seconds = 20.0
+
+[wake_word]
+enabled = false
+inference_framework = "onnx"
+models_dir = "models/openwakeword"
+model_names = ["hey_jarvis_v0.1"]
+custom_model_paths = []
+wake_phrases = ["hey jarvis", "good morning jarvis", "good evening jarvis", "good afternoon jarvis", "hello jarvis"]
+threshold = 0.5
+chunk_samples = 1280
+debounce_seconds = 1.0
+timeout_seconds = 0.0
+acknowledgement = "Yes sir. How can I help you?"
+
 [stt]
 engine = "faster-whisper"
 model = "small"
@@ -10,7 +30,9 @@ language = ""
 compute_type = "float32"
 
 [codex]
-project_dir = "/Users/mishahorodnytskyi/Developer/voice-assistant"
+project_dir = "."
+model = "gpt-5.5"
+model_reasoning_effort = "low"
 sandbox = "workspace-write"
 approval_policy = "never"
 skip_git_repo_check = true

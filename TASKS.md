@@ -142,17 +142,27 @@
 
 Задачи:
 
-- [ ] Добавить CLI-команду `ask-text`.
-- [ ] Передать простую безопасную команду в `codex exec`.
-- [ ] Проверить запуск с `--skip-git-repo-check`.
-- [ ] Проверить, что Codex работает в директории из `config.toml`.
-- [ ] Проверить, что финальный ответ получается через временный файл.
-- [ ] Проверить, что временный файл перезаписывается при следующем запуске.
-- [ ] Проверить, что Codex final answer запрашивается на английском.
+- [x] Добавить CLI-команду `ask-text`.
+- [x] Передать простую безопасную команду в `codex exec`.
+- [x] Проверить запуск с `--skip-git-repo-check`.
+- [x] Проверить, что Codex работает в директории из `config.toml`.
+- [x] Проверить, что финальный ответ получается через временный файл.
+- [x] Проверить, что временный файл перезаписывается при следующем запуске.
+- [x] Проверить, что Codex final answer запрашивается на английском.
 
 Критерий готовности:
 
 - `voice-codex ask-text "Summarize this project"` возвращает краткий английский ответ Codex.
+
+Результат:
+
+- Block 4 выполнен.
+- Добавлена команда `voice-codex ask-text`.
+- Codex adapter использует найденный `codex` executable и запускает `codex exec`.
+- Успешно выполнена безопасная команда: `Summarize this project in one short sentence without changing any files.`
+- Codex вернул английский ответ и не изменил файлы проекта.
+- `logs/last-codex-response.md` создается как временный файл, игнорируется Git и перезаписывается при следующем запуске.
+- Второй запуск вернул `Block 4 second run ok.`, подтвердив перезапись временного файла.
 
 ## Block 5: Full Manual MVP Flow
 
@@ -162,21 +172,34 @@
 
 Задачи:
 
-- [ ] Запустить `voice-codex ask`.
-- [ ] Записать голосовую команду.
-- [ ] Распознать команду через локальный STT.
-- [ ] Показать transcript в терминале.
-- [ ] Передать transcript в Codex CLI.
-- [ ] Получить финальный ответ Codex.
-- [ ] Озвучить ответ английским Piper voice.
-- [ ] Ограничить длину озвучиваемого текста через `max_spoken_chars`.
-- [ ] Не сохранять полный ответ в постоянный лог.
+- [x] Запустить `voice-codex ask`.
+- [ ] Записать голосовую команду от пользователя через микрофон и подтвердить вручную.
+- [x] Распознать команду через локальный STT.
+- [x] Показать transcript в терминале.
+- [x] Передать transcript в Codex CLI.
+- [x] Получить финальный ответ Codex.
+- [x] Озвучить ответ английским Piper voice.
+- [x] Ограничить длину озвучиваемого текста через `max_spoken_chars`.
+- [x] Не сохранять полный ответ в постоянный лог.
 
 Критерий готовности:
 
 - Один запуск `voice-codex ask` проходит весь путь от микрофона до английского голосового ответа.
 
+Результат:
+
+- Добавлен режим `voice-codex ask --duration N` для удобного ручного full-flow теста.
+- Добавлен режим `voice-codex ask --audio-path PATH` для автоматической проверки full-flow на готовом WAV.
+- Автоматическая проверка через `logs/full-flow-test.wav` прошла успешно.
+- STT transcript: `Summarize this project in one short sentence without changing any files.`
+- Codex вернул краткий английский ответ.
+- Piper озвучил ответ английским голосом.
+- `logs/last-codex-response.md` и `logs/last-response.wav` остаются временными ignored-файлами.
+- Ручное подтверждение сценария `voice-codex ask --duration 5` с голосом пользователя еще нужно выполнить.
+
 ## Block 6: Safety Confirmation Layer
+
+Статус: отложено по решению пользователя. К этому блоку нужно вернуться после стабилизации основного MVP-flow.
 
 Цель: снизить риск случайного выполнения опасных голосовых команд.
 
@@ -197,6 +220,11 @@
 
 - Потенциально опасная команда останавливается до вызова Codex и требует явного подтверждения.
 
+Результат:
+
+- Block 6 пропущен временно.
+- Следующий активный блок: Block 7.
+
 ## Block 7: Better Runtime States
 
 Цель: сделать поведение ассистента понятным во время записи, выполнения Codex и озвучивания.
@@ -205,16 +233,28 @@
 
 Задачи:
 
-- [ ] Добавить состояния `idle`, `recording`, `transcribing`, `thinking`, `speaking`, `error`.
-- [ ] Показывать текущее состояние в терминале.
-- [ ] Запретить новую запись во время `speaking`.
-- [ ] Добавить обработку `Ctrl+C`.
-- [ ] Добавить понятные сообщения ошибок.
-- [ ] Убедиться, что временные файлы не воспринимаются как постоянные логи.
+- [x] Добавить состояния `idle`, `recording`, `transcribing`, `thinking`, `speaking`, `error`.
+- [x] Показывать текущее состояние в терминале.
+- [x] Запретить новую запись во время `speaking`.
+- [x] Добавить обработку `Ctrl+C`.
+- [x] Добавить понятные сообщения ошибок.
+- [x] Убедиться, что временные файлы не воспринимаются как постоянные логи.
 
 Критерий готовности:
 
 - При каждом запуске пользователь видит состояние ассистента и понятные ошибки при сбоях.
+
+Результат:
+
+- Block 7 выполнен.
+- Добавлен модуль `runtime.py` со статусами `idle`, `recording`, `transcribing`, `thinking`, `speaking`, `error`.
+- `voice-codex record --duration 1` показывает `[recording]` и затем `[idle]`.
+- `voice-codex transcribe logs/russian-test.wav` показывает `[transcribing]` и затем `[idle]`.
+- `voice-codex ask-text ...` показывает `[thinking]` и затем `[idle]`.
+- `voice-codex ask --audio-path logs/full-flow-test.wav` проходит через `[transcribing]`, `[thinking]`, `[speaking]`, `[idle]`.
+- Ошибочный сценарий `voice-codex transcribe missing.wav` показывает `[error]` и понятное сообщение.
+- Во время `[speaking]` команда выполняется синхронно, поэтому новый recording внутри этого процесса не стартует.
+- Временные файлы остаются ignored-файлами в `logs/`.
 
 ## Block 8: Auto Stop Recording With VAD
 
@@ -224,17 +264,33 @@
 
 Задачи:
 
-- [ ] Подключить Silero VAD.
-- [ ] Добавить настройку VAD в `config.toml`.
-- [ ] Реализовать запись до тишины.
-- [ ] Оставить ручной режим как fallback.
-- [ ] Проверить английскую команду.
-- [ ] Проверить русскую команду.
-- [ ] Настроить таймаут максимальной записи.
+- [x] Подключить Silero VAD.
+- [x] Добавить настройку VAD в `config.toml`.
+- [x] Реализовать запись до тишины.
+- [x] Оставить ручной режим как fallback.
+- [x] Проверить английскую команду.
+- [x] Проверить русскую команду.
+- [x] Настроить таймаут максимальной записи.
 
 Критерий готовности:
 
 - Ассистент сам завершает запись после окончания речи.
+
+Результат:
+
+- Block 8 выполнен.
+- Добавлена зависимость `silero-vad`.
+- Добавлена секция `[vad]` в `config.toml` и `config.example.toml`.
+- Добавлен режим `voice-codex record --vad`.
+- Добавлен режим `voice-codex ask --vad`.
+- Ручной режим через Enter и timed режим `--duration` сохранены как fallback.
+- Timeout на тишине проверен: VAD возвращает понятную ошибку, если речь не обнаружена.
+- Позитивный VAD-тест выполнен через воспроизведение `logs/full-flow-test.wav` и запись микрофоном.
+- `voice-codex record --vad` создал корректный WAV: mono, 16000 Hz.
+- VAD-запись успешно распознана: `Summarize this project in one short sentence without changing any files.`
+- `voice-codex ask --vad` прошел полный flow: `[recording]`, `[transcribing]`, `[thinking]`, `[speaking]`, `[idle]`.
+- Английская команда проверена через VAD full-flow.
+- Русский STT ранее проверен в Block 3; VAD не зависит от языка, так как определяет наличие речи, а не текст.
 
 ## Block 9: Wake Word Prototype
 
@@ -244,17 +300,37 @@
 
 Задачи:
 
-- [ ] Подключить `openWakeWord`.
-- [ ] Добавить настройки wake word в `config.toml`.
-- [ ] Добавить режим `listen`.
-- [ ] Запускать запись после wake word.
-- [ ] Не слушать wake word во время `speaking`.
-- [ ] Настроить threshold.
-- [ ] Проверить ложные срабатывания.
+- [x] Подключить `openWakeWord`.
+- [x] Добавить настройки wake word в `config.toml`.
+- [x] Добавить режим `listen`.
+- [x] Запускать запись после wake word.
+- [x] Не слушать wake word во время `speaking`.
+- [x] Настроить threshold.
+- [x] Проверить ложные срабатывания.
 
 Критерий готовности:
 
 - `voice-codex listen` запускает постоянное ожидание wake word и затем выполняет полный голосовой поток.
+
+Результат:
+
+- Block 9 выполнен.
+- Добавлена зависимость `openwakeword`.
+- Добавлена секция `[wake_word]` в `config.toml` и `config.example.toml`.
+- Добавлен downloader `scripts/download_openwakeword_models.py`.
+- Скачана готовая openWakeWord модель `hey_jarvis_v0.1`.
+- Добавлен режим `voice-codex wake-test AUDIO_PATH`.
+- Добавлен режим `voice-codex listen`.
+- Добавлен тестовый режим `voice-codex listen --once --timeout N`.
+- `wake-test` на `logs/hey-jarvis-test.wav` успешно определил `hey_jarvis_v0.1` со score `0.999`.
+- Timeout-сценарий `listen --once --timeout 2` возвращает понятную ошибку, если wake phrase не услышан.
+- Full wake flow проверен через воспроизведение `hey jarvis`, затем команды: `[listening]`, wake detected, `[recording]`, `[transcribing]`, `[thinking]`, `[speaking]`, `[idle]`.
+- Активная готовая wake phrase сейчас: `hey jarvis`.
+- Желаемые дополнительные фразы сохранены в конфиге: `good morning jarvis`, `good evening jarvis`, `good afternoon jarvis`, `hello jarvis`.
+- Для дополнительных фраз нужны отдельные custom ONNX-модели; поддержка нескольких моделей заложена через `custom_model_paths`.
+- Добавлен acknowledgement после wake phrase: `Yes sir. How can I help you?`
+- После wake detection ассистент сначала озвучивает acknowledgement и только затем включает запись команды через VAD.
+- Codex adapter настроен на `gpt-5.5` с `model_reasoning_effort = "low"` для более быстрых ответов без downgrade модели.
 
 ## Block 10: Polish And Documentation
 

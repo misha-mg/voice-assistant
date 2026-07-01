@@ -11,8 +11,11 @@ requires-python = ">=3.9"
 dependencies = [
   "faster-whisper>=1.1.0",
   "numpy>=1.24",
+  "openwakeword>=0.6.0",
+  "piper-tts>=1.4.0",
   "sounddevice>=0.4.6",
   "soundfile>=0.12.1",
+  "silero-vad>=6.2.0",
   "tomli>=2.0.1; python_version < '3.11'",
 ]
 

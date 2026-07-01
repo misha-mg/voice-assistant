@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, List
 
 try:
     import tomllib
@@ -25,12 +25,38 @@ class SttConfig:
     engine: str = "faster-whisper"
     model: str = "small"
     language: str = ""
-    compute_type: str = "auto"
+    compute_type: str = "float32"
+
+
+@dataclass(frozen=True)
+class VadConfig:
+    enabled: bool = False
+    threshold: float = 0.5
+    min_silence_duration_ms: int = 700
+    speech_pad_ms: int = 100
+    max_recording_seconds: float = 20.0
+
+
+@dataclass(frozen=True)
+class WakeWordConfig:
+    enabled: bool = False
+    inference_framework: str = "onnx"
+    models_dir: Path = Path("models/openwakeword")
+    model_names: List[str] = None
+    custom_model_paths: List[Path] = None
+    wake_phrases: List[str] = None
+    threshold: float = 0.5
+    chunk_samples: int = 1280
+    debounce_seconds: float = 1.0
+    timeout_seconds: float = 0.0
+    acknowledgement: str = "Yes sir. How can I help you?"
 
 
 @dataclass(frozen=True)
 class CodexConfig:
     project_dir: Path
+    model: str = "gpt-5.5"
+    model_reasoning_effort: str = "low"
     sandbox: str = "workspace-write"
     approval_policy: str = "never"
     skip_git_repo_check: bool = True
@@ -51,6 +77,8 @@ class TtsConfig:
 class AppConfig:
     root_dir: Path
     audio: AudioConfig
+    vad: VadConfig
+    wake_word: WakeWordConfig
     stt: SttConfig
     codex: CodexConfig
     tts: TtsConfig
@@ -68,6 +96,11 @@ def _path(root_dir: Path, value: str) -> Path:
 
 def _parse_scalar(value: str) -> Any:
     value = value.strip()
+    if value.startswith("[") and value.endswith("]"):
+        inner = value[1:-1].strip()
+        if not inner:
+            return []
+        return [_parse_scalar(item.strip()) for item in inner.split(",")]
     if value.startswith('"') and value.endswith('"'):
         return value[1:-1]
     if value in {"true", "false"}:
@@ -75,7 +108,10 @@ def _parse_scalar(value: str) -> Any:
     try:
         return int(value)
     except ValueError:
-        return value
+        try:
+            return float(value)
+        except ValueError:
+            return value
 
 
 def _load_toml(path: Path) -> Dict[str, Any]:
@@ -108,6 +144,8 @@ def load_config(config_path: Path) -> AppConfig:
         data = {}
 
     audio = _section(data, "audio")
+    vad = _section(data, "vad")
+    wake_word = _section(data, "wake_word")
     stt = _section(data, "stt")
     codex = _section(data, "codex")
     tts = _section(data, "tts")
@@ -124,14 +162,54 @@ def load_config(config_path: Path) -> AppConfig:
             channels=int(audio.get("channels", 1)),
             recording_device=str(audio.get("recording_device", "")),
         ),
+        vad=VadConfig(
+            enabled=bool(vad.get("enabled", False)),
+            threshold=float(vad.get("threshold", 0.5)),
+            min_silence_duration_ms=int(vad.get("min_silence_duration_ms", 700)),
+            speech_pad_ms=int(vad.get("speech_pad_ms", 100)),
+            max_recording_seconds=float(vad.get("max_recording_seconds", 20.0)),
+        ),
+        wake_word=WakeWordConfig(
+            enabled=bool(wake_word.get("enabled", False)),
+            inference_framework=str(wake_word.get("inference_framework", "onnx")),
+            models_dir=_path(root_dir, str(wake_word.get("models_dir", "models/openwakeword"))),
+            model_names=[
+                str(item) for item in wake_word.get("model_names", ["hey_jarvis_v0.1"])
+            ],
+            custom_model_paths=[
+                _path(root_dir, str(item)) for item in wake_word.get("custom_model_paths", [])
+            ],
+            wake_phrases=[
+                str(item)
+                for item in wake_word.get(
+                    "wake_phrases",
+                    [
+                        "hey jarvis",
+                        "good morning jarvis",
+                        "good evening jarvis",
+                        "good afternoon jarvis",
+                        "hello jarvis",
+                    ],
+                )
+            ],
+            threshold=float(wake_word.get("threshold", 0.5)),
+            chunk_samples=int(wake_word.get("chunk_samples", 1280)),
+            debounce_seconds=float(wake_word.get("debounce_seconds", 1.0)),
+            timeout_seconds=float(wake_word.get("timeout_seconds", 0.0)),
+            acknowledgement=str(
+                wake_word.get("acknowledgement", "Yes sir. How can I help you?")
+            ),
+        ),
         stt=SttConfig(
             engine=str(stt.get("engine", "faster-whisper")),
             model=str(stt.get("model", "small")),
             language=str(stt.get("language", "")),
-            compute_type=str(stt.get("compute_type", "auto")),
+            compute_type=str(stt.get("compute_type", "float32")),
         ),
         codex=CodexConfig(
             project_dir=project_dir,
+            model=str(codex.get("model", "gpt-5.5")),
+            model_reasoning_effort=str(codex.get("model_reasoning_effort", "low")),
             sandbox=str(codex.get("sandbox", "workspace-write")),
             approval_policy=str(codex.get("approval_policy", "never")),
             skip_git_repo_check=bool(codex.get("skip_git_repo_check", True)),
