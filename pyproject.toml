@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "voice-codex-assistant"
+version = "0.1.0"
+description = "Local voice interface for Codex CLI using local STT and TTS."
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+  "faster-whisper>=1.1.0",
+  "numpy>=1.24",
+  "sounddevice>=0.4.6",
+  "soundfile>=0.12.1",
+  "tomli>=2.0.1; python_version < '3.11'",
+]
+
+[project.scripts]
+voice-codex = "voice_assistant.main:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]

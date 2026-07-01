@@ -1,0 +1,25 @@
+[audio]
+sample_rate = 16000
+channels = 1
+recording_device = ""
+
+[stt]
+engine = "faster-whisper"
+model = "small"
+language = ""
+compute_type = "default"
+
+[codex]
+project_dir = "/Users/mishahorodnytskyi/Developer/voice-assistant"
+sandbox = "workspace-write"
+approval_policy = "never"
+skip_git_repo_check = true
+spoken_response_language = "English"
+max_spoken_chars = 1200
+
+[tts]
+engine = "piper"
+voice_model = "models/piper/en_US-lessac-medium.onnx"
+voice_config = "models/piper/en_US-lessac-medium.onnx.json"
+output_wav = "logs/last-response.wav"
+player = "afplay"
