@@ -7,7 +7,7 @@ recording_device = ""
 engine = "faster-whisper"
 model = "small"
 language = ""
-compute_type = "default"
+compute_type = "float32"
 
 [codex]
 project_dir = "/Users/mishahorodnytskyi/Developer/voice-assistant"

@@ -28,6 +28,12 @@ python scripts/download_piper_voice.py
 voice-codex check
 ```
 
+## Audio Devices
+
+```bash
+voice-codex devices
+```
+
 ## Speak Test
 
 ```bash
@@ -41,6 +47,21 @@ voice-codex ask
 ```
 
 Press Enter to start recording, speak, then press Enter again to stop.
+
+For a timed recording:
+
+```bash
+voice-codex record --duration 5
+afplay logs/last-input.wav
+```
+
+## Transcribe Test
+
+```bash
+voice-codex transcribe logs/last-input.wav
+```
+
+If no file is provided, the command uses `logs/last-input.wav`.
 
 ## Notes
 
